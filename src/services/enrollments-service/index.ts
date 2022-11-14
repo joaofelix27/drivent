@@ -1,5 +1,5 @@
 import { request } from "@/utils/request";
-import { notFoundError, requestError } from "@/errors";
+import { notFoundError } from "@/errors";
 import addressRepository, { CreateAddressParams } from "@/repositories/address-repository";
 import enrollmentRepository, { CreateEnrollmentParams } from "@/repositories/enrollment-repository";
 import { exclude } from "@/utils/prisma-utils";
@@ -10,6 +10,15 @@ async function getAddressFromCEP(cep: string) {
 
   if (!result.data) {
     throw notFoundError();
+  } else {
+    const cepReturn= result.data;
+    delete cepReturn.siafi;
+    delete cepReturn.ddd;
+    delete cepReturn.ibge;
+    delete cepReturn.gia;
+    delete cepReturn.cep;
+    delete Object.assign(cepReturn, { cidade: cepReturn.localidade })["localidade"];
+    return cepReturn;
   }
 }
 
@@ -41,10 +50,12 @@ async function createOrUpdateEnrollmentWithAddress(params: CreateOrUpdateEnrollm
   const enrollment = exclude(params, "address");
   const address = getAddressForUpsert(params.address);
 
-  //TODO - Verificar se o CEP é válido
+  const result = await getAddressFromCEP (address.cep);
+
   const newEnrollment = await enrollmentRepository.upsert(params.userId, enrollment, exclude(enrollment, "userId"));
 
   await addressRepository.upsert(newEnrollment.id, address, address);
+  if (!result?.cidade) { throw Error("CEP INVÁLIDO!"); } 
 }
 
 function getAddressForUpsert(address: CreateAddressParams) {
